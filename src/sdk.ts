@@ -12,6 +12,7 @@ import { ConfigError, toError } from './domain/errors'
 import type { Message } from './domain/message'
 import { MessagesDatabaseReader } from './infra/db/reader'
 import { MessageWatchSource } from './infra/db/watcher'
+import { PrivateApiBridge } from './infra/outgoing/private-api'
 import { MessageSender } from './infra/outgoing/sender'
 import { TempFileManager } from './infra/outgoing/temp-files'
 import { getDefaultDatabasePath, requireMacOS } from './infra/platform'
@@ -28,6 +29,9 @@ import { Semaphore } from './utils/async'
 // -----------------------------------------------
 
 const ERROR_SDK_DESTROYED = 'SDK is destroyed'
+
+/** Where the private API helper dials by default (`IMKIT_HELPER_PORT` in Messages.app). */
+const DEFAULT_PRIVATE_API_PORT = 45677
 const ERROR_WATCHER_RUNNING = 'Watcher is already running'
 
 /**
@@ -52,6 +56,7 @@ export class IMessageSDK implements SendPort {
     private readonly database: MessagesDatabaseReader
     private readonly tempFiles: TempFileManager
     private readonly sender: MessageSender
+    private readonly privateApi: PrivateApiBridge | null
     private readonly plugins: PluginManager
     private readonly abortController = new AbortController()
 
@@ -78,7 +83,12 @@ export class IMessageSDK implements SendPort {
 
         const semaphore = new Semaphore(maxConcurrentSends)
 
+        this.privateApi = config.privateApi
+            ? new PrivateApiBridge(config.privateApi.port ?? DEFAULT_PRIVATE_API_PORT, this.debug)
+            : null
+
         this.sender = new MessageSender({
+            privateApi: this.privateApi ?? undefined,
             semaphore,
             debug: this.debug,
             timeout: sendTimeout,
@@ -164,6 +174,25 @@ export class IMessageSDK implements SendPort {
         await this.plugins.callInterruptingHook('onBeforeSend', 'SEND', { request })
         await this.sender.send(request)
         await this.plugins.callHook('onAfterSend', { request })
+    }
+
+    // -----------------------------------------------
+    // Private API
+    // -----------------------------------------------
+
+    /** The private API helper is loaded in Messages.app and connected (`config.privateApi`). */
+    get privateApiConnected(): boolean {
+        return this.privateApi?.connected ?? false
+    }
+
+    /**
+     * The name a person shares with their iMessage profile ("Share Name and
+     * Photo"), if they shared it with this account. Null without the helper.
+     */
+    async nickname(handle: string): Promise<string | null> {
+        this.assertNotDestroyed()
+        if (!this.privateApi?.connected) return null
+        return this.privateApi.nickname(handle)
     }
 
     // -----------------------------------------------
@@ -261,6 +290,8 @@ export class IMessageSDK implements SendPort {
         await safeRun(errors, 'pluginManager', () => this.plugins.destroy())
         await safeRun(errors, 'tempFileManager', () => this.tempFiles.destroy())
         await safeRun(errors, 'database', () => this.database.close())
+        const privateApi = this.privateApi
+        if (privateApi) await safeRun(errors, 'privateApi', () => privateApi.close())
 
         if (errors.length > 0) {
             if (this.debug) {

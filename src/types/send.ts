@@ -2,6 +2,8 @@
  * Send request type.
  */
 
+import type { MessageMention } from '../domain/message'
+
 /** Arguments for `sdk.send()`. */
 export interface SendRequest {
     /**
@@ -31,4 +33,12 @@ export interface SendRequest {
      * 10 min), NOT synchronously after send.
      */
     readonly attachments?: readonly string[]
+
+    /**
+     * People to @mention in `text`, as UTF-16 ranges (the shape incoming
+     * `Message.mentions` uses). Needs the private API helper
+     * (`IMessageConfig.privateApi`) and a group chat; otherwise `text`
+     * goes out as plain text with the names in it.
+     */
+    readonly mentions?: readonly MessageMention[]
 }

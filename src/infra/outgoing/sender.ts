@@ -20,6 +20,7 @@ import { basename, resolve } from 'node:path'
 import type { SendPort } from '../../application/send-port'
 import type { ChatServicePrefix } from '../../domain/chat-id'
 import { IMessageError, SendError, toErrorMessage } from '../../domain/errors'
+import type { MessageMention } from '../../domain/message'
 import { resolveTarget } from '../../domain/routing'
 import { isURL, validateMessageContent } from '../../domain/validate'
 import type { SendRequest } from '../../types/send'
@@ -28,6 +29,7 @@ import { delay, retry, type Semaphore } from '../../utils/async'
 import { detectChatServicePrefix } from '../platform'
 import { buildSendScript, inspectAttachment, type ResolvedAttachment, type SendMethod } from './applescript-builder'
 import { execAppleScript, MessagesAppProbe } from './applescript-transport'
+import type { PrivateApiBridge } from './private-api'
 
 // -----------------------------------------------
 // Defaults
@@ -55,6 +57,7 @@ interface NormalizedSendJob {
     readonly target: SendTarget
     readonly text?: string
     readonly attachments: readonly string[]
+    readonly mentions: readonly MessageMention[]
 }
 
 /** Options for constructing a MessageSender. */
@@ -67,6 +70,8 @@ interface MessageSenderOptions {
     readonly retryDelay?: number
     /** Abort signal that cancels all sends on SDK shutdown. */
     readonly signal?: AbortSignal
+    /** Sends with mentions to a group go through this while it's connected. */
+    readonly privateApi?: PrivateApiBridge
 }
 
 // -----------------------------------------------
@@ -82,6 +87,7 @@ export class MessageSender implements SendPort {
     private readonly chatServicePrefix: ChatServicePrefix
     private readonly semaphore?: Semaphore
     private readonly signal?: AbortSignal
+    private readonly privateApi?: PrivateApiBridge
     private readonly messagesApp = new MessagesAppProbe()
 
     constructor({
@@ -91,6 +97,7 @@ export class MessageSender implements SendPort {
         timeout = SEND_TIMEOUT_MS,
         semaphore,
         signal,
+        privateApi,
     }: MessageSenderOptions = {}) {
         this.debug = debug
         this.retryAttempts = retryAttempts
@@ -98,6 +105,7 @@ export class MessageSender implements SendPort {
         this.sendTimeoutMs = timeout
         this.semaphore = semaphore
         this.signal = signal
+        this.privateApi = privateApi
         this.chatServicePrefix = detectChatServicePrefix()
     }
 
@@ -131,6 +139,7 @@ export class MessageSender implements SendPort {
             await this.assertMessagesAppRunning()
 
             const attachments = job.attachments.map((a) => this.resolveAttachment(a))
+            if (await this.dispatchWithMentions(job, attachments)) return
             await this.dispatch(job.target, job.text, attachments)
         } catch (error) {
             // Inner helpers already produce fully-contextual `IMessageError`
@@ -144,15 +153,43 @@ export class MessageSender implements SendPort {
     }
 
     private createSendJob(request: SendRequest): NormalizedSendJob {
-        const { to, text, attachments = [] } = request
+        const { to, text, attachments = [], mentions = [] } = request
         const resolved = resolveTarget(to)
 
         if (resolved.kind === 'group') {
             const identifier = resolved.chatId.buildGroupGuid(this.chatServicePrefix)
-            return { target: { method: 'chat', identifier }, text, attachments }
+            return { target: { method: 'chat', identifier }, text, attachments, mentions }
         }
 
-        return { target: { method: 'buddy', identifier: resolved.recipient }, text, attachments }
+        return { target: { method: 'buddy', identifier: resolved.recipient }, text, attachments, mentions }
+    }
+
+    /**
+     * Mentions only exist in group chats and only the private API can send
+     * them: text goes through the helper, then any attachments by AppleScript.
+     * Returns false (nothing sent) when that path doesn't apply, so the caller
+     * sends everything as plain text.
+     */
+    private async dispatchWithMentions(job: NormalizedSendJob, attachments: ResolvedAttachment[]): Promise<boolean> {
+        if (!job.mentions.length || !job.text || job.target.method !== 'chat') return false
+        if (!this.privateApi?.connected) {
+            if (this.debug) console.log('[imessage-kit] mentions sent as plain text: private API helper not connected')
+            return false
+        }
+        await this.privateApi.send(job.target.identifier, job.text, job.mentions)
+        for (let i = 0; i < attachments.length; i++) {
+            await delay(INTER_ATTACHMENT_DELAY_MS, this.signal)
+            const script = buildSendScript({
+                method: 'chat',
+                identifier: job.target.identifier,
+                attachment: attachments[i],
+            })
+            await this.executeWithRetry(
+                script,
+                `Send attachment ${i + 1}/${attachments.length} to group ${job.target.identifier}`
+            )
+        }
+        return true
     }
 
     private async dispatch(

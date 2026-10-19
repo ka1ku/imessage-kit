@@ -354,3 +354,37 @@ describe('MessageSender — abort', () => {
         expect(call).toBeLessThan(5)
     })
 })
+
+// -----------------------------------------------
+// Mentions (private API)
+// -----------------------------------------------
+
+describe('MessageSender — mentions', () => {
+    const mentions = [{ address: '+15551234567', start: 4, length: 3 }]
+    const fakeBridge = (connected: boolean) => {
+        const sent: unknown[][] = []
+        return { sent, bridge: { connected, send: async (...args: unknown[]) => void sent.push(args) } }
+    }
+
+    it('sends text with mentions to a group through the connected helper, not osascript', async () => {
+        const { sent, bridge } = fakeBridge(true)
+        const sender = await makeSender({ privateApi: bridge })
+        await sender.send({ to: 'iMessage;+;chat123', text: 'hey Kai', mentions })
+        expect(sent).toEqual([['iMessage;+;chat123', 'hey Kai', mentions]])
+        expect(execCalls).toHaveLength(0)
+    })
+
+    it('falls back to plain text by osascript without a helper, or in a DM', async () => {
+        const off = fakeBridge(false)
+        await (await makeSender({ privateApi: off.bridge })).send({
+            to: 'iMessage;+;chat123',
+            text: 'hey Kai',
+            mentions,
+        })
+        const on = fakeBridge(true)
+        await (await makeSender({ privateApi: on.bridge })).send({ to: '+15551234567', text: 'hey Kai', mentions })
+        expect(off.sent).toHaveLength(0)
+        expect(on.sent).toHaveLength(0)
+        expect(execCalls).toHaveLength(2)
+    })
+})

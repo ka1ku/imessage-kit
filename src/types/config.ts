@@ -29,6 +29,13 @@ export interface IMessageConfig {
     /** Enable verbose debug logging. @default false */
     readonly debug?: boolean
 
+    /**
+     * Listen for the private API helper (`private-api/`, loaded into
+     * Messages.app) on 127.0.0.1:`port`. Sends with `mentions` go
+     * through it while it's connected. Off by default.
+     */
+    readonly privateApi?: { readonly port?: number }
+
     /** Plugin list. */
     readonly plugins?: readonly Plugin[]
 }
