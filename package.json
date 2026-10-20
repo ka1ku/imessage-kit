@@ -1,6 +1,6 @@
 {
     "name": "@photon-ai/imessage-kit",
-    "version": "3.0.1-mushy.1",
+    "version": "3.0.1-mushy.2",
     "description": "Type-safe macOS iMessage SDK for TypeScript",
     "author": "GreatSomething",
     "license": "MIT",
@@ -26,7 +26,10 @@
     "files": [
         "dist",
         "README.md",
-        "LICENSE"
+        "LICENSE",
+        "private-api/*.m",
+        "private-api/*.sh",
+        "private-api/README.md"
     ],
     "keywords": [
         "imessage",
