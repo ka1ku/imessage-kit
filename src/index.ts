@@ -18,6 +18,7 @@ export { IMessageSDK } from './sdk'
 
 export { BOUNDS } from './sdk-bounds'
 export type { IMessageConfig } from './types/config'
+export type { MessageEffect } from './types/send'
 
 // -----------------------------------------------
 // Domain — types

@@ -4,6 +4,21 @@
 
 import type { MessageMention } from '../domain/message'
 
+/** iMessage screen and bubble effects ("Send with effect"). */
+export type MessageEffect =
+    | 'confetti'
+    | 'fireworks'
+    | 'balloons'
+    | 'celebration'
+    | 'lasers'
+    | 'love'
+    | 'spotlight'
+    | 'echo'
+    | 'slam'
+    | 'loud'
+    | 'gentle'
+    | 'invisibleInk'
+
 /** Arguments for `sdk.send()`. */
 export interface SendRequest {
     /**
@@ -41,4 +56,10 @@ export interface SendRequest {
      * goes out as plain text with the names in it.
      */
     readonly mentions?: readonly MessageMention[]
+
+    /**
+     * Send `text` with an iMessage effect. Needs the private API helper;
+     * without it the text goes out plain by AppleScript.
+     */
+    readonly effect?: MessageEffect
 }

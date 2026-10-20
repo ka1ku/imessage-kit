@@ -370,7 +370,7 @@ describe('MessageSender — mentions', () => {
         const { sent, bridge } = fakeBridge(true)
         const sender = await makeSender({ privateApi: bridge })
         await sender.send({ to: 'iMessage;+;chat123', text: 'hey Kai', mentions })
-        expect(sent).toEqual([['iMessage;+;chat123', 'hey Kai', mentions]])
+        expect(sent).toEqual([['iMessage;+;chat123', 'hey Kai', mentions, null]])
         expect(execCalls).toHaveLength(0)
     })
 
@@ -386,5 +386,35 @@ describe('MessageSender — mentions', () => {
         expect(off.sent).toHaveLength(0)
         expect(on.sent).toHaveLength(0)
         expect(execCalls).toHaveLength(2)
+    })
+})
+
+describe('MessageSender — effects', () => {
+    const fakeBridge = (connected: boolean) => {
+        const sent: unknown[][] = []
+        return { sent, bridge: { connected, send: async (...args: unknown[]) => void sent.push(args) } }
+    }
+
+    it('sends an effect through the helper, in a group and in a DM, with its Apple style id', async () => {
+        const { sent, bridge } = fakeBridge(true)
+        const sender = await makeSender({ privateApi: bridge })
+        await sender.send({ to: 'iMessage;+;chat123', text: 'you won', effect: 'confetti' })
+        await sender.send({ to: '+15551234567', text: 'sent you $40', effect: 'confetti' })
+        expect(sent).toEqual([
+            ['iMessage;+;chat123', 'you won', [], 'com.apple.messages.effect.CKConfettiEffect'],
+            ['iMessage;-;+15551234567', 'sent you $40', [], 'com.apple.messages.effect.CKConfettiEffect'],
+        ])
+        expect(execCalls).toHaveLength(0)
+    })
+
+    it('falls back to plain text by osascript without a helper', async () => {
+        const { sent, bridge } = fakeBridge(false)
+        await (await makeSender({ privateApi: bridge })).send({
+            to: '+15551234567',
+            text: 'you won',
+            effect: 'confetti',
+        })
+        expect(sent).toHaveLength(0)
+        expect(execCalls).toHaveLength(1)
     })
 })

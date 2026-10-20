@@ -19,11 +19,12 @@ import { basename, resolve } from 'node:path'
 
 import type { SendPort } from '../../application/send-port'
 import type { ChatServicePrefix } from '../../domain/chat-id'
+import { EFFECT_STYLE_IDS } from '../../domain/effects'
 import { IMessageError, SendError, toErrorMessage } from '../../domain/errors'
 import type { MessageMention } from '../../domain/message'
 import { resolveTarget } from '../../domain/routing'
 import { isURL, validateMessageContent } from '../../domain/validate'
-import type { SendRequest } from '../../types/send'
+import type { MessageEffect, SendRequest } from '../../types/send'
 import { delay, retry, type Semaphore } from '../../utils/async'
 
 import { detectChatServicePrefix } from '../platform'
@@ -58,6 +59,7 @@ interface NormalizedSendJob {
     readonly text?: string
     readonly attachments: readonly string[]
     readonly mentions: readonly MessageMention[]
+    readonly effect?: MessageEffect
 }
 
 /** Options for constructing a MessageSender. */
@@ -70,7 +72,7 @@ interface MessageSenderOptions {
     readonly retryDelay?: number
     /** Abort signal that cancels all sends on SDK shutdown. */
     readonly signal?: AbortSignal
-    /** Sends with mentions to a group go through this while it's connected. */
+    /** Sends with mentions (groups) or an effect go through this while it's connected. */
     readonly privateApi?: PrivateApiBridge
 }
 
@@ -139,7 +141,7 @@ export class MessageSender implements SendPort {
             await this.assertMessagesAppRunning()
 
             const attachments = job.attachments.map((a) => this.resolveAttachment(a))
-            if (await this.dispatchWithMentions(job, attachments)) return
+            if (await this.dispatchThroughHelper(job, attachments)) return
             await this.dispatch(job.target, job.text, attachments)
         } catch (error) {
             // Inner helpers already produce fully-contextual `IMessageError`
@@ -153,40 +155,44 @@ export class MessageSender implements SendPort {
     }
 
     private createSendJob(request: SendRequest): NormalizedSendJob {
-        const { to, text, attachments = [], mentions = [] } = request
+        const { to, text, attachments = [], mentions = [], effect } = request
         const resolved = resolveTarget(to)
 
         if (resolved.kind === 'group') {
             const identifier = resolved.chatId.buildGroupGuid(this.chatServicePrefix)
-            return { target: { method: 'chat', identifier }, text, attachments, mentions }
+            return { target: { method: 'chat', identifier }, text, attachments, mentions, effect }
         }
 
-        return { target: { method: 'buddy', identifier: resolved.recipient }, text, attachments, mentions }
+        return { target: { method: 'buddy', identifier: resolved.recipient }, text, attachments, mentions, effect }
     }
 
     /**
-     * Mentions only exist in group chats and only the private API can send
-     * them: text goes through the helper, then any attachments by AppleScript.
-     * Returns false (nothing sent) when that path doesn't apply, so the caller
-     * sends everything as plain text.
+     * Mentions (group chats only) and effects need the private API: text goes
+     * through the helper, then any attachments by AppleScript. Returns false
+     * (nothing sent) when that path doesn't apply, so the caller sends
+     * everything as plain text.
      */
-    private async dispatchWithMentions(job: NormalizedSendJob, attachments: ResolvedAttachment[]): Promise<boolean> {
-        if (!job.mentions.length || !job.text || job.target.method !== 'chat') return false
+    private async dispatchThroughHelper(job: NormalizedSendJob, attachments: ResolvedAttachment[]): Promise<boolean> {
+        const isGroup = job.target.method === 'chat'
+        const mentions = isGroup ? job.mentions : []
+        if (!job.text || (!mentions.length && !job.effect)) return false
         if (!this.privateApi?.connected) {
-            if (this.debug) console.log('[imessage-kit] mentions sent as plain text: private API helper not connected')
+            if (this.debug) console.log('[imessage-kit] sent as plain text: private API helper not connected')
             return false
         }
-        await this.privateApi.send(job.target.identifier, job.text, job.mentions)
+        const chatGuid = isGroup ? job.target.identifier : `${this.chatServicePrefix};-;${job.target.identifier}`
+        const effectStyleId = job.effect ? EFFECT_STYLE_IDS[job.effect] : null
+        await this.privateApi.send(chatGuid, job.text, mentions, effectStyleId)
         for (let i = 0; i < attachments.length; i++) {
             await delay(INTER_ATTACHMENT_DELAY_MS, this.signal)
             const script = buildSendScript({
-                method: 'chat',
+                method: job.target.method,
                 identifier: job.target.identifier,
                 attachment: attachments[i],
             })
             await this.executeWithRetry(
                 script,
-                `Send attachment ${i + 1}/${attachments.length} to group ${job.target.identifier}`
+                `Send attachment ${i + 1}/${attachments.length} to ${job.target.identifier}`
             )
         }
         return true

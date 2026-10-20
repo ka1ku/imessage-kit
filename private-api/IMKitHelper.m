@@ -8,7 +8,8 @@
 //
 //   {"id":1,"op":"hello"}                                  → {"id":1,"ok":true,"version":1}
 //   {"id":2,"op":"send","chat":"any;+;chat123","text":"hey Kai",
-//    "mentions":[{"address":"+15551234567","start":4,"length":3}]}
+//    "mentions":[{"address":"+15551234567","start":4,"length":3}],
+//    "effect":"com.apple.messages.effect.CKConfettiEffect"}
 //                                                          → {"id":2,"ok":true,"guid":"…"}
 //   {"id":3,"op":"nickname","handle":"+15551234567"}       → {"id":3,"ok":true,"name":"Kai"}
 //
@@ -71,7 +72,8 @@ static NSDictionary *sendText(NSDictionary *req) {
   id message = [NSClassFromString(@"IMMessage") alloc];
   SEL init = @selector(initWithSender:time:text:messageSubject:fileTransferGUIDs:flags:error:guid:subject:balloonBundleID:payloadData:expressiveSendStyleID:);
   if (![message respondsToSelector:init]) return fail(@"IMMessage init selector missing on this macOS");
-  message = [message initWithSender:nil time:nil text:body messageSubject:nil fileTransferGUIDs:nil flags:MESSAGE_FLAGS error:nil guid:nil subject:nil balloonBundleID:nil payloadData:nil expressiveSendStyleID:nil];
+  NSString *effect = [req[@"effect"] isKindOfClass:NSString.class] ? req[@"effect"] : nil;
+  message = [message initWithSender:nil time:nil text:body messageSubject:nil fileTransferGUIDs:nil flags:MESSAGE_FLAGS error:nil guid:nil subject:nil balloonBundleID:nil payloadData:nil expressiveSendStyleID:effect];
   [chat sendMessage:message];
   return @{@"ok" : @YES, @"guid" : [message guid] ?: NSNull.null};
 }

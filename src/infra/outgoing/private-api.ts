@@ -46,8 +46,13 @@ export class PrivateApiBridge {
     }
 
     /** Sends `text` to a chat with `mentions` as real @mentions. Resolves with the new message's guid. */
-    async send(chatGuid: string, text: string, mentions: readonly MessageMention[]): Promise<string | null> {
-        const res = await this.request({ op: 'send', chat: chatGuid, text, mentions })
+    async send(
+        chatGuid: string,
+        text: string,
+        mentions: readonly MessageMention[],
+        effectStyleId: string | null = null
+    ): Promise<string | null> {
+        const res = await this.request({ op: 'send', chat: chatGuid, text, mentions, effect: effectStyleId })
         return typeof res.guid === 'string' ? res.guid : null
     }
 
