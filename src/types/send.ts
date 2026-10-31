@@ -62,4 +62,11 @@ export interface SendRequest {
      * without it the text goes out plain by AppleScript.
      */
     readonly effect?: MessageEffect
+
+    /**
+     * Guid of a message in the same chat to send `text` as an inline reply to
+     * (the message's own `id`, or the guid a send resolved with). Needs the
+     * private API helper; without it the text goes out as a normal message.
+     */
+    readonly replyTo?: string
 }

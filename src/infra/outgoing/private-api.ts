@@ -50,9 +50,17 @@ export class PrivateApiBridge {
         chatGuid: string,
         text: string,
         mentions: readonly MessageMention[],
-        effectStyleId: string | null = null
+        effectStyleId: string | null = null,
+        replyTo: string | null = null
     ): Promise<string | null> {
-        const res = await this.request({ op: 'send', chat: chatGuid, text, mentions, effect: effectStyleId })
+        const res = await this.request({
+            op: 'send',
+            chat: chatGuid,
+            text,
+            mentions,
+            effect: effectStyleId,
+            replyTo,
+        })
         return typeof res.guid === 'string' ? res.guid : null
     }
 

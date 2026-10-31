@@ -60,6 +60,7 @@ interface NormalizedSendJob {
     readonly attachments: readonly string[]
     readonly mentions: readonly MessageMention[]
     readonly effect?: MessageEffect
+    readonly replyTo?: string
 }
 
 /** Options for constructing a MessageSender. */
@@ -155,15 +156,16 @@ export class MessageSender implements SendPort {
     }
 
     private createSendJob(request: SendRequest): NormalizedSendJob {
-        const { to, text, attachments = [], mentions = [], effect } = request
+        const { to, text, attachments = [], mentions = [], effect, replyTo } = request
         const resolved = resolveTarget(to)
 
         if (resolved.kind === 'group') {
             const identifier = resolved.chatId.buildGroupGuid(this.chatServicePrefix)
-            return { target: { method: 'chat', identifier }, text, attachments, mentions, effect }
+            return { target: { method: 'chat', identifier }, text, attachments, mentions, effect, replyTo }
         }
 
-        return { target: { method: 'buddy', identifier: resolved.recipient }, text, attachments, mentions, effect }
+        const target = { method: 'buddy' as const, identifier: resolved.recipient }
+        return { target, text, attachments, mentions, effect, replyTo }
     }
 
     /**
@@ -175,14 +177,14 @@ export class MessageSender implements SendPort {
     private async dispatchThroughHelper(job: NormalizedSendJob, attachments: ResolvedAttachment[]): Promise<boolean> {
         const isGroup = job.target.method === 'chat'
         const mentions = isGroup ? job.mentions : []
-        if (!job.text || (!mentions.length && !job.effect)) return false
+        if (!job.text || (!mentions.length && !job.effect && !job.replyTo)) return false
         if (!this.privateApi?.connected) {
             if (this.debug) console.log('[imessage-kit] sent as plain text: private API helper not connected')
             return false
         }
         const chatGuid = isGroup ? job.target.identifier : `${this.chatServicePrefix};-;${job.target.identifier}`
         const effectStyleId = job.effect ? EFFECT_STYLE_IDS[job.effect] : null
-        await this.privateApi.send(chatGuid, job.text, mentions, effectStyleId)
+        await this.privateApi.send(chatGuid, job.text, mentions, effectStyleId, job.replyTo ?? null)
         for (let i = 0; i < attachments.length; i++) {
             await delay(INTER_ATTACHMENT_DELAY_MS, this.signal)
             const script = buildSendScript({

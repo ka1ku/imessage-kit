@@ -9,7 +9,8 @@
 //   {"id":1,"op":"hello"}                                  → {"id":1,"ok":true,"version":1}
 //   {"id":2,"op":"send","chat":"any;+;chat123","text":"hey Kai",
 //    "mentions":[{"address":"+15551234567","start":4,"length":3}],
-//    "effect":"com.apple.messages.effect.CKConfettiEffect"}
+//    "effect":"com.apple.messages.effect.CKConfettiEffect",
+//    "replyTo":"<guid of a message in that chat to reply to inline>"}
 //                                                          → {"id":2,"ok":true,"guid":"…"}
 //   {"id":3,"op":"nickname","handle":"+15551234567"}       → {"id":3,"ok":true,"name":"Kai"}
 //
@@ -18,6 +19,7 @@
 
 #import <Foundation/Foundation.h>
 #import <arpa/inet.h>
+#import <dlfcn.h>
 #import <netinet/in.h>
 #import <sys/socket.h>
 #import <unistd.h>
@@ -38,7 +40,17 @@ static const int DEFAULT_PORT = 45677;
 - (id)nicknameForHandle:(id)handle;
 - (NSString *)firstName;
 - (NSString *)displayName;
+- (id)messageForGUID:(NSString *)guid;
+- (void)loadMessageWithGUID:(NSString *)guid completionBlock:(void (^)(id message))block;
+- (id)_imMessageItem;
+- (id)_newChatItems;
+- (void)setThreadIdentifier:(NSString *)identifier;
+- (void)setThreadOriginator:(id)message;
 @end
+
+typedef NSString *(*ThreadIdentifierMaker)(id partChatItem);
+
+static const NSTimeInterval REPLY_LOOKUP_SECONDS = 3;
 
 // What Messages.app sets on a typed, sent iMessage (as BlueBubbles' helper does).
 static const unsigned long long MESSAGE_FLAGS = 100005;
@@ -52,6 +64,54 @@ static id chatFor(NSString *guid) {
   // chat.db says "any;+;chat…" on macOS 26 while IMCore may know it as "iMessage;+;chat…".
   if (!chat) chat = [registry existingChatWithChatIdentifier:[[guid componentsSeparatedByString:@";"] lastObject]];
   return chat;
+}
+
+// The message a reply points at: already loaded in the chat, or loaded from history
+// (spinning the main run loop, since requests are served on the main thread).
+static id originalMessage(id chat, NSString *guid) {
+  if ([chat respondsToSelector:@selector(messageForGUID:)]) {
+    id loaded = [chat messageForGUID:guid];
+    if (loaded) return loaded;
+  }
+  id history = [NSClassFromString(@"IMChatHistoryController") sharedInstance];
+  if (![history respondsToSelector:@selector(loadMessageWithGUID:completionBlock:)]) return nil;
+  __block id found = nil;
+  __block BOOL done = NO;
+  [history loadMessageWithGUID:guid completionBlock:^(id message) {
+    found = message;
+    done = YES;
+  }];
+  NSDate *until = [NSDate dateWithTimeIntervalSinceNow:REPLY_LOOKUP_SECONDS];
+  while (!done && [until timeIntervalSinceNow] > 0) {
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+  }
+  return found;
+}
+
+// IMCore's own thread id for the original's first part ("0:0:<length>:<guid>").
+static NSString *threadIdentifierFor(id original) {
+  ThreadIdentifierMaker make = (ThreadIdentifierMaker)dlsym(RTLD_DEFAULT, "IMCreateThreadIdentifierForMessagePartChatItem");
+  if (!make || ![original respondsToSelector:@selector(_imMessageItem)]) return nil;
+  id item = [original _imMessageItem];
+  if (![item respondsToSelector:@selector(_newChatItems)]) return nil;
+  id parts = [item _newChatItems];
+  id first = [parts isKindOfClass:NSArray.class] ? [parts firstObject] : parts;
+  if (!first) return nil;
+  NSString *identifier = make(first);
+  return identifier.length ? identifier : nil;
+}
+
+static NSString *makeReply(id chat, id message, NSString *replyTo) {
+  if (![message respondsToSelector:@selector(setThreadIdentifier:)] || ![message respondsToSelector:@selector(setThreadOriginator:)]) {
+    return @"replies aren't supported on this macOS";
+  }
+  id original = originalMessage(chat, replyTo);
+  if (!original) return [NSString stringWithFormat:@"no message %@ to reply to", replyTo];
+  NSString *thread = threadIdentifierFor(original);
+  if (!thread) return @"couldn't make a thread id for that message";
+  [message setThreadIdentifier:thread];
+  [message setThreadOriginator:original];
+  return nil;
 }
 
 static NSDictionary *sendText(NSDictionary *req) {
@@ -74,6 +134,11 @@ static NSDictionary *sendText(NSDictionary *req) {
   if (![message respondsToSelector:init]) return fail(@"IMMessage init selector missing on this macOS");
   NSString *effect = [req[@"effect"] isKindOfClass:NSString.class] ? req[@"effect"] : nil;
   message = [message initWithSender:nil time:nil text:body messageSubject:nil fileTransferGUIDs:nil flags:MESSAGE_FLAGS error:nil guid:nil subject:nil balloonBundleID:nil payloadData:nil expressiveSendStyleID:effect];
+  NSString *replyTo = [req[@"replyTo"] isKindOfClass:NSString.class] ? req[@"replyTo"] : nil;
+  if (replyTo.length) {
+    NSString *problem = makeReply(chat, message, replyTo);
+    if (problem) return fail(problem);
+  }
   [chat sendMessage:message];
   return @{@"ok" : @YES, @"guid" : [message guid] ?: NSNull.null};
 }

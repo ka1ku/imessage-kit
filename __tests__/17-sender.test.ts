@@ -370,7 +370,7 @@ describe('MessageSender — mentions', () => {
         const { sent, bridge } = fakeBridge(true)
         const sender = await makeSender({ privateApi: bridge })
         await sender.send({ to: 'iMessage;+;chat123', text: 'hey Kai', mentions })
-        expect(sent).toEqual([['iMessage;+;chat123', 'hey Kai', mentions, null]])
+        expect(sent).toEqual([['iMessage;+;chat123', 'hey Kai', mentions, null, null]])
         expect(execCalls).toHaveLength(0)
     })
 
@@ -401,9 +401,17 @@ describe('MessageSender — effects', () => {
         await sender.send({ to: 'iMessage;+;chat123', text: 'you won', effect: 'confetti' })
         await sender.send({ to: '+15551234567', text: 'sent you $40', effect: 'confetti' })
         expect(sent).toEqual([
-            ['iMessage;+;chat123', 'you won', [], 'com.apple.messages.effect.CKConfettiEffect'],
-            ['iMessage;-;+15551234567', 'sent you $40', [], 'com.apple.messages.effect.CKConfettiEffect'],
+            ['iMessage;+;chat123', 'you won', [], 'com.apple.messages.effect.CKConfettiEffect', null],
+            ['iMessage;-;+15551234567', 'sent you $40', [], 'com.apple.messages.effect.CKConfettiEffect', null],
         ])
+        expect(execCalls).toHaveLength(0)
+    })
+
+    it('sends an inline reply through the helper, naming the message it answers', async () => {
+        const { sent, bridge } = fakeBridge(true)
+        const sender = await makeSender({ privateApi: bridge })
+        await sender.send({ to: 'iMessage;+;chat123', text: 'save my contact', replyTo: 'GUID-1' })
+        expect(sent).toEqual([['iMessage;+;chat123', 'save my contact', [], null, 'GUID-1']])
         expect(execCalls).toHaveLength(0)
     })
 
