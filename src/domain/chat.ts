@@ -53,6 +53,9 @@ export interface Chat {
 
     /** Timestamp of the most recent message in the chat. */
     readonly lastMessageAt: Date | null
+
+    /** Handles of the other people in the chat (`chat_handle_join`), never the account itself. */
+    readonly participants: readonly string[]
 }
 
 // -----------------------------------------------

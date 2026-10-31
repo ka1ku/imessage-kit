@@ -250,7 +250,15 @@ export function rowToChat(row: Record<string, unknown>): Chat {
         lastReadAt: optionalDate(row.last_read_message_timestamp, 'chat.last_read_message_timestamp'),
         unreadCount: requireNumber(row.unread_count, 'chat.unread_count'),
         lastMessageAt: optionalDate(row.last_date, 'chat.last_date'),
+        participants: splitParticipants(row.participants),
     }
+}
+
+const PARTICIPANT_SEPARATOR = String.fromCharCode(31)
+
+function splitParticipants(value: unknown): readonly string[] {
+    if (typeof value !== 'string' || value === '') return []
+    return [...new Set(value.split(PARTICIPANT_SEPARATOR))]
 }
 
 // -----------------------------------------------

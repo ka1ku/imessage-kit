@@ -74,6 +74,9 @@ describe('listChats', () => {
         // Check unreadCount
         expect(dm!.unreadCount).toBe(1)
         expect(group!.unreadCount).toBe(1)
+
+        expect(dm!.participants).toEqual(['+1234567890'])
+        expect([...group!.participants].sort()).toEqual(['+2222222222', '+3333333333'])
     })
 
     it('respects limit parameter', async () => {

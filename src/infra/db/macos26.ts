@@ -97,6 +97,12 @@ const CHAT_FIELDS = [
     'chat.display_name',
     'chat_stats.last_date',
     'COALESCE(chat_stats.unread_count, 0) AS unread_count',
+    `(
+        SELECT group_concat(handle.id, char(31))
+        FROM chat_handle_join
+        INNER JOIN handle ON handle.ROWID = chat_handle_join.handle_id
+        WHERE chat_handle_join.chat_id = chat.ROWID
+    ) AS participants`,
 ] as const
 
 const ATTACHMENT_FIELDS = [
