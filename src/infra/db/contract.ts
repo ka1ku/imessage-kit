@@ -63,6 +63,8 @@ export interface ChatQueryInput extends ChatQuery {
 export interface MessagesDbQueries {
     readonly buildMessageQuery: (input: MessageQueryInput) => SqlQuery
     readonly buildChatQuery: (input: ChatQueryInput) => SqlQuery
+    /** Every group chat's join state and members, without touching `message`. */
+    readonly buildGroupMembershipQuery: () => SqlQuery
     readonly buildAttachmentQuery: (messageIds: readonly number[]) => SqlQuery
     /**
      * Look up chat metadata (guid / identifier / style) for a set of

@@ -83,6 +83,15 @@ describe('listChats', () => {
         expect(dm!.isJoined).toBe(false)
     })
 
+    it('lists every group with whether the account is in it and who else is', async () => {
+        const sdk = new IMessageSDK({ databasePath: dbPath })
+        const memberships = await sdk.listGroupMemberships()
+        const group = memberships.find((m) => m.chatId === 'chatTEST1234567890')
+        expect(memberships.every((m) => m.chatId !== 'iMessage;-;+1234567890')).toBe(true)
+        expect(group!.isJoined).toBe(true)
+        expect([...group!.participants].sort()).toEqual(['+2222222222', '+3333333333'])
+    })
+
     it('respects limit parameter', async () => {
         const sdk = new IMessageSDK({ databasePath: dbPath })
         const chatsLimited = await sdk.listChats({ limit: 1 })

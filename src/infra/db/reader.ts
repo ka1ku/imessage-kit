@@ -13,14 +13,22 @@
  */
 
 import type { Attachment } from '../../domain/attachment'
-import type { Chat } from '../../domain/chat'
+import type { Chat, GroupMembership } from '../../domain/chat'
 import { DatabaseError, toErrorMessage } from '../../domain/errors'
 import type { Message } from '../../domain/message'
 import type { ChatQuery, MessageQuery } from '../../types/query'
 import { delay } from '../../utils/async'
 import type { MessageQueryInput, MessagesDbQueries, QueryExecutor, SqlQuery } from './contract'
 import { macos26Queries } from './macos26'
-import { parseNumber, patchMessageChatInfo, requireNumber, rowToAttachment, rowToChat, rowToMessage } from './mapper'
+import {
+    parseNumber,
+    patchMessageChatInfo,
+    requireNumber,
+    rowToAttachment,
+    rowToChat,
+    rowToGroupMembership,
+    rowToMessage,
+} from './mapper'
 import { SqliteClient } from './sqlite-adapter'
 
 // -----------------------------------------------
@@ -78,6 +86,16 @@ export class MessagesDatabaseReader extends SqliteClient {
     /** List chats with optional filters and sorting. */
     async listChats(query: ChatQuery = {}): Promise<readonly Chat[]> {
         return queryChats(this.exec, this.queries, query)
+    }
+
+    /** Every group chat's join state and members, in one query that never scans messages. */
+    async listGroupMemberships(): Promise<readonly GroupMembership[]> {
+        const query = this.queries.buildGroupMembershipQuery()
+        try {
+            return this.exec(query.sql, query.params).map((row) => rowToGroupMembership(row))
+        } catch (error) {
+            throw DatabaseError(`Failed to list group memberships: ${toErrorMessage(error)}`, error)
+        }
     }
 }
 

@@ -7,7 +7,7 @@
 
 import { type DispatchEvents, MessageDispatcher } from './application/message-dispatcher'
 import type { SendPort } from './application/send-port'
-import type { Chat } from './domain/chat'
+import type { Chat, GroupMembership } from './domain/chat'
 import { ConfigError, toError } from './domain/errors'
 import type { Message } from './domain/message'
 import { MessagesDatabaseReader } from './infra/db/reader'
@@ -150,6 +150,17 @@ export class IMessageSDK implements SendPort {
         await this.plugins.callHook('onAfterChatQuery', { query, chats })
 
         return chats
+    }
+
+    /**
+     * Every group chat's join state and members. Reads only the chat and member
+     * tables, so it stays a few milliseconds however big chat.db gets; poll it
+     * to notice the account being added to or removed from groups, which
+     * chat.db doesn't always record as a message.
+     */
+    async listGroupMemberships(): Promise<readonly GroupMembership[]> {
+        this.assertNotDestroyed()
+        return this.database.listGroupMemberships()
     }
 
     // -----------------------------------------------

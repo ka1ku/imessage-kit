@@ -245,6 +245,25 @@ export const macos26Queries: MessagesDbQueries = {
         }
     },
 
+    buildGroupMembershipQuery() {
+        return {
+            sql: `
+                SELECT
+                    chat.guid,
+                    chat.state,
+                    (
+                        SELECT group_concat(handle.id, char(31))
+                        FROM chat_handle_join
+                        INNER JOIN handle ON handle.ROWID = chat_handle_join.handle_id
+                        WHERE chat_handle_join.chat_id = chat.ROWID
+                    ) AS participants
+                FROM chat
+                WHERE chat.style = ?
+            `,
+            params: [CHAT_STYLE_GROUP],
+        }
+    },
+
     buildChatQuery(query: ChatQueryInput) {
         const conditions: string[] = []
         const params: QueryParam[] = []

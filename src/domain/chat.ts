@@ -16,6 +16,21 @@ import type { Service } from './service'
 /** Normalized chat kind derived from `chat.style`. */
 export type ChatKind = 'dm' | 'group' | 'unknown'
 
+/**
+ * Whether the account is in a group chat and who else is, read from the chat
+ * and member tables only (no message scan), so every group can be read at once.
+ */
+export interface GroupMembership {
+    /** Normalized chat id suitable for routing and matching. */
+    readonly chatId: string
+
+    /** The account is currently in the chat (`chat.state` 3). */
+    readonly isJoined: boolean
+
+    /** Handles of the other people in the chat (`chat_handle_join`). */
+    readonly participants: readonly string[]
+}
+
 /** Chat summary. */
 export interface Chat {
     /** Normalized chat id suitable for routing and matching. */

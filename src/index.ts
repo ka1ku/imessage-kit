@@ -25,7 +25,7 @@ export type { MessageEffect } from './types/send'
 // -----------------------------------------------
 
 export type { Attachment, TransferStatus } from './domain/attachment'
-export type { Chat, ChatKind } from './domain/chat'
+export type { Chat, ChatKind, GroupMembership } from './domain/chat'
 export type {
     ExpireStatus,
     Message,

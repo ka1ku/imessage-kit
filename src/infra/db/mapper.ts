@@ -10,7 +10,7 @@ import { basename, join } from 'node:path'
 
 import type { Attachment } from '../../domain/attachment'
 import { resolveTransferStatus } from '../../domain/attachment'
-import type { Chat, ChatKind } from '../../domain/chat'
+import type { Chat, ChatKind, GroupMembership } from '../../domain/chat'
 import { resolveChatKind } from '../../domain/chat'
 import { ChatId, parseChatServicePrefix } from '../../domain/chat-id'
 import type { Message } from '../../domain/message'
@@ -233,6 +233,15 @@ function mapReaction(row: Record<string, unknown>): Reaction | null {
 function mapChatId(row: Record<string, unknown>): string {
     const guid = requireNonEmptyString(row.guid, 'chat.guid')
     return ChatId.fromUserInput(guid).toString()
+}
+
+/** Convert a raw group membership row to a GroupMembership. */
+export function rowToGroupMembership(row: Record<string, unknown>): GroupMembership {
+    return {
+        chatId: mapChatId(row),
+        isJoined: optionalNumber(row.state, 'chat.state') === CHAT_STATE_JOINED,
+        participants: splitParticipants(row.participants),
+    }
 }
 
 /** Convert a raw chat row to a Chat domain model. */
