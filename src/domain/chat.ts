@@ -56,6 +56,9 @@ export interface Chat {
 
     /** Handles of the other people in the chat (`chat_handle_join`), never the account itself. */
     readonly participants: readonly string[]
+
+    /** The account is currently in the chat (`chat.state` 3); false once it left or was removed. */
+    readonly isJoined: boolean
 }
 
 // -----------------------------------------------

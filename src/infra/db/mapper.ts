@@ -251,8 +251,11 @@ export function rowToChat(row: Record<string, unknown>): Chat {
         unreadCount: requireNumber(row.unread_count, 'chat.unread_count'),
         lastMessageAt: optionalDate(row.last_date, 'chat.last_date'),
         participants: splitParticipants(row.participants),
+        isJoined: optionalNumber(row.state, 'chat.state') === CHAT_STATE_JOINED,
     }
 }
+
+const CHAT_STATE_JOINED = 3
 
 const PARTICIPANT_SEPARATOR = String.fromCharCode(31)
 

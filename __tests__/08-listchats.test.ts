@@ -39,6 +39,7 @@ describe('listChats', () => {
             isRead: false,
             date: Date.now() - 1000,
         })
+        db.run("UPDATE chat SET state = 3 WHERE guid LIKE '%chatTEST1234567890'")
     })
 
     afterAll(() => {
@@ -77,6 +78,9 @@ describe('listChats', () => {
 
         expect(dm!.participants).toEqual(['+1234567890'])
         expect([...group!.participants].sort()).toEqual(['+2222222222', '+3333333333'])
+
+        expect(group!.isJoined).toBe(true)
+        expect(dm!.isJoined).toBe(false)
     })
 
     it('respects limit parameter', async () => {

@@ -95,6 +95,7 @@ const CHAT_FIELDS = [
     'chat.is_deleting_incoming_messages',
     'chat.last_read_message_timestamp',
     'chat.display_name',
+    'chat.state',
     'chat_stats.last_date',
     'COALESCE(chat_stats.unread_count, 0) AS unread_count',
     `(
